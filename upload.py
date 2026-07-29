@@ -11,13 +11,17 @@ UBID = "76010302"
 FCID = "1"
 TYPE_D = "FS1"
 
+headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+}
+
 # --- 2. 從 SolarEdge 抓取最新資料 ---
 print("正在從 SolarEdge 讀取發電數據...")
 se_url = f"https://monitoringapi.solaredge.com/site/{SOLAREDGE_SITE_ID}/overview?api_key={SOLAREDGE_API_KEY}"
 
 try:
-    req = urllib.request.Request(se_url, headers={'User-Agent': 'Mozilla/5.0'})
-    with urllib.request.urlopen(req) as response:
+    req = urllib.request.Request(se_url, headers=headers)
+    with urllib.request.urlopen(req, timeout=30) as response:
         se_data = json.loads(response.read().decode('utf-8'))
     
     overview = se_data.get('overview', {})
@@ -49,13 +53,16 @@ try:
     json_data = json.dumps(payload).encode('utf-8')
 
     print("正在傳送數據至高雄綠能平台...")
+    post_headers = headers.copy()
+    post_headers['Content-Type'] = 'application/json'
+
     post_req = urllib.request.Request(
         kems_url, 
         data=json_data, 
-        headers={'Content-Type': 'application/json'}
+        headers=post_headers
     )
     
-    with urllib.request.urlopen(post_req) as post_response:
+    with urllib.request.urlopen(post_req, timeout=30) as post_response:
         res_code = post_response.getcode()
         res_body = post_response.read().decode('utf-8')
         print(f"綠能平台回應狀態碼: {res_code}")
@@ -64,5 +71,4 @@ try:
 
 except Exception as e:
     print(f"\n執行過程中發生錯誤: {e}")
-
-input("\n請按 Enter 鍵關閉視窗...")
+    raise e  # 拋出錯誤讓 GitHub Actions 記錄詳細訊息
