@@ -1,6 +1,6 @@
 import urllib.request
 import json
-import datetime
+from datetime import datetime, timezone, timedelta
 
 # --- 1. 設定參數 ---
 SOLAREDGE_SITE_ID = "4391290"
@@ -32,8 +32,10 @@ try:
     gen_max_kw = round(current_power_w / 1000.0, 2)
     gen_kwh = round(last_day_data / 1000.0, 2)
     
-    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    print(f"成功取得數據！當前功率: {gen_max_kw} kW, 當日發電: {gen_kwh} kWh")
+    # 取得台灣時間 (UTC+8)
+    tz_taiwan = timezone(timedelta(hours=8))
+    now_str = datetime.now(tz_taiwan).strftime("%Y-%m-%d %H:%M:%S")
+    print(f"成功取得數據！台灣時間: {now_str}, 當前功率: {gen_max_kw} kW, 當日發電: {gen_kwh} kWh")
 
     # --- 3. 打包資料準備傳送到高雄綠能平台 ---
     payload = {
@@ -71,4 +73,4 @@ try:
 
 except Exception as e:
     print(f"\n執行過程中發生錯誤: {e}")
-    raise e  # 拋出錯誤讓 GitHub Actions 記錄詳細訊息
+    raise e
