@@ -1,22 +1,47 @@
-name: Auto Upload Energy Data
+name: Kaohsiung SolarEdge Auto Reporter
 
+# 觸發條件設定
 on:
+  # 1. 支援外部免費服務 (如 cron-job.org) 透過 API 精準觸發
+  repository_dispatch:
+    types: [trigger_send_data]
+
+  # 2. 保留 GitHub 原生 Cron 排程 (每 15 分鐘一次，作為自動備援)
   schedule:
-    # 設定每 15 分鐘自動在雲端觸發一次程式
     - cron: '*/15 * * * *'
-  workflow_dispatch: # 允許手動點擊執行測試
+
+  # 3. 允許在 GitHub 網頁 Actions 頁面手動點擊按鈕執行
+  workflow_dispatch:
 
 jobs:
-  run-uploader:
+  run-solar-script:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Check out repo code
+      # 步驟 1：下載專案的程式碼
+      - name: Checkout Repository
         uses: actions/checkout@v4
 
+      # 步驟 2：建立 Python 執行環境
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
+          python-version: '3.10'
 
-      - name: Run script
-        run: python upload.py
+      # 步驟 3：安裝所需的 Python 套件
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          # 若無 requirements.txt，預設安裝 requests
+          pip install requests
+
+      # 步驟 4：執行抓取數據並上傳至高雄綠能平台的 Python 腳本
+      # 注意：請將 main.py 替換為您專案中實際的 Python 檔名
+      - name: Run Solar Data Upload Script
+        env:
+          # 若您有使用 Repository Secrets，可以在此將環境變數傳入腳本
+          SOLAREDGE_API_KEY: ${{ secrets.SOLAREDGE_API_KEY }}
+          KAOHSIUNG_API_TOKEN: ${{ secrets.KAOHSIUNG_API_TOKEN }}
+        run: |
+          python main.py
