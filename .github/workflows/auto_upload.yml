@@ -44,4 +44,4 @@ jobs:
           SOLAREDGE_API_KEY: ${{ secrets.SOLAREDGE_API_KEY }}
           KAOHSIUNG_API_TOKEN: ${{ secrets.KAOHSIUNG_API_TOKEN }}
         run: |
-          python main.py
+          python upload.py
