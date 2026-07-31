@@ -1,100 +1,92 @@
-import os
+import urllib.request
 import json
 import time
-import urllib.request
-import urllib.error
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 
-# ==========================================
-# 1. 環境變數設定（讀取 GitHub Secrets）
-# ==========================================
-SOLAREDGE_API_KEY = os.environ.get("SOLAREDGE_API_KEY")
-KAOHSIUNG_API_TOKEN = os.environ.get("KAOHSIUNG_API_TOKEN")
+# --- 1. 設定參數 ---
+SOLAREDGE_SITE_ID = "4391290"
+SOLAREDGE_API_KEY = "BZACTRW5TQFVOUDOL6X45SFJX7Y4UAQ5"
 
-# 您在高雄綠能平台的案場編號/設備編號（若程式碼中有硬編碼請依實際修改）
-# SITE_ID = "您的案場編號" 
+KEMS_API_KEY = "0BC4B29B-858A-4FA2-9287-90CE11672F42"
+UBID = "76010302"
+FCID = "1"
+TYPE_D = "FS1"
 
-if not SOLAREDGE_API_KEY or not KAOHSIUNG_API_TOKEN:
-    print("錯誤：未偵測到 API Key 或 Token，請檢查 GitHub Secrets 設定。")
-    exit(1)
-
-# ==========================================
-# 2. 從 SolarEdge 讀取即時數據
-# ==========================================
-print("正在從 SolarEdge 讀取發電數據...")
-
-# SolarEdge API URL (以概略即時數據為例)
-solaredge_url = f"https://monitoringapi.solaredge.com/site/12345/overview?api_key={SOLAREDGE_API_KEY}" # 請確認您的 Site ID
-
-try:
-    req = urllib.request.Request(solaredge_url)
-    with urllib.request.urlopen(req, timeout=20) as response:
-        se_data = json.loads(response.read().decode('utf-8'))
-        
-    # 解析數據 (依 SolarEdge 回傳格式)
-    overview = se_data.get("overview", {})
-    current_power_kw = overview.get("currentPower", {}).get("power", 0) / 1000.0  # W 轉 kW
-    daily_energy_kwh = overview.get("lastDayData", {}).get("energy", 0) / 1000.0  # Wh 轉 kWh
-    
-    # 取得台灣時間 (UTC+8)
-    now_taiwan = datetime.utcnow() + timedelta(hours=8)
-    time_str = now_taiwan.strftime("%Y-%m-%d %H:%M:%S")
-    
-    print(f"成功取得數據！台灣時間: {time_str}, 當前功率: {current_power_kw:.2f} kW, 當日發電: {daily_energy_kwh:.2f} kWh")
-
-except Exception as e:
-    print(f"擷取 SolarEdge 數據失敗: {e}")
-    exit(1)
-
-# ==========================================
-# 3. 組裝高雄綠能平台要求之 JSON 封包
-# ==========================================
-payload = {
-    "token": KAOHSIUNG_API_TOKEN,
-    "time": time_str,
-    "power": round(current_power_kw, 2),
-    "generation": round(daily_energy_kwh, 2)
+headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 }
 
-json_data = json.dumps(payload).encode('utf-8')
+# --- 2. 從 SolarEdge 抓取最新資料 ---
+print("正在從 SolarEdge 讀取發電數據...")
+se_url = f"https://monitoringapi.solaredge.com/site/{SOLAREDGE_SITE_ID}/overview?api_key={SOLAREDGE_API_KEY}"
 
-# 高雄綠能平台 API Endpoint
-kems_url = "https://kems.kcg.gov.tw/api/v1/upload" # 請確認您的綠能平台 API 網址
+try:
+    req = urllib.request.Request(se_url, headers=headers)
+    with urllib.request.urlopen(req, timeout=30) as response:
+        se_data = json.loads(response.read().decode('utf-8'))
+    
+    overview = se_data.get('overview', {})
+    current_power_w = overview.get('currentPower', {}).get('power', 0.0) # 瓦 (W)
+    last_day_data = overview.get('lastDayData', {}).get('energy', 0.0)    # 瓦時 (Wh)
+    
+    # 單位轉換：W 轉 kW，Wh 轉 kWh
+    gen_max_kw = round(current_power_w / 1000.0, 2)
+    gen_kwh = round(last_day_data / 1000.0, 2)
+    
+    # 取得台灣時間 (UTC+8)
+    tz_taiwan = timezone(timedelta(hours=8))
+    now_str = datetime.now(tz_taiwan).strftime("%Y-%m-%d %H:%M:%S")
+    print(f"成功取得數據！台灣時間: {now_str}, 當前功率: {gen_max_kw} kW, 當日發電: {gen_kwh} kWh")
 
-post_req = urllib.request.Request(
-    kems_url,
-    data=json_data,
-    headers={
-        "Content-Type": "application/json",
-        "User-Agent": "Mozilla/5.0"
-    },
-    method="POST"
-)
+    # --- 3. 打包資料準備傳送到高雄綠能平台 ---
+    payload = {
+        "UBID": UBID,
+        "FCID": FCID,
+        "DT": now_str,
+        "Status": "N",
+        "DataType": {
+            "Name": "TypeD",
+            "Value": TYPE_D
+        },
+        "GenkWh": str(gen_kwh),
+        "GenMaxkW": str(gen_max_kw)
+    }
 
-# ==========================================
-# 4. 傳送數據至高雄綠能平台（含 3 次自動重試）
-# ==========================================
-print("正在傳送數據至高雄綠能平台...")
+    kems_url = f"http://125.227.111.239/KEMSAPI/?Key={KEMS_API_KEY}"
+    json_data = json.dumps(payload).encode('utf-8')
 
-MAX_RETRIES = 3      # 最多重試次數
-RETRY_DELAY = 5      # 每次失敗後等待秒數
-upload_success = False
+    print("正在傳送數據至高雄綠能平台...")
+    post_headers = headers.copy()
+    post_headers['Content-Type'] = 'application/json'
 
-for attempt in range(1, MAX_RETRIES + 1):
-    try:
-        with urllib.request.urlopen(post_req, timeout=30) as post_response:
-            status_code = post_response.getcode()
-            print(f"綠能平台回應狀態碼: {status_code}")
-            print("=== 傳送完成！ ===")
-            upload_success = True
-            break  # 傳送成功，立刻結束重試迴圈
-            
-    except (urllib.error.URLError, TimeoutError, Exception) as e:
-        print(f"⚠️ 第 {attempt} 次傳送失敗 (原因: {e})")
-        if attempt < MAX_RETRIES:
-            print(f"等待 {RETRY_DELAY} 秒後進行第 {attempt + 1} 次重試...")
-            time.sleep(RETRY_DELAY)
-        else:
-            print("❌ 已達到最大重試次數 (3次)。本次高雄綠能平台傳送暫時跳過，等待下一期(15分鐘後)自動觸發。")
+    post_req = urllib.request.Request(
+        kems_url, 
+        data=json_data, 
+        headers=post_headers
+    )
+    
+    # --- 4. 傳送資料（含 3 次自動重試機制） ---
+    MAX_RETRIES = 3      # 最多重試次數
+    RETRY_DELAY = 5      # 每次失敗後等待 5 秒
 
-# 備註：即便 3 次都失敗也不強制 exit(1)，防止 GitHub 發送騷擾 Email
+    for attempt in range(1, MAX_RETRIES + 1):
+        try:
+            with urllib.request.urlopen(post_req, timeout=30) as post_response:
+                res_code = post_response.getcode()
+                res_body = post_response.read().decode('utf-8')
+                print(f"綠能平台回應狀態碼: {res_code}")
+                print(f"綠能平台回應內容: {res_body}")
+                print("\n=== 傳送完成！ ===")
+                break  # 傳送成功，跳出迴圈
+                
+        except Exception as e:
+            print(f"⚠️ 第 {attempt} 次傳送失敗 (原因: {e})")
+            if attempt < MAX_RETRIES:
+                print(f"等待 {RETRY_DELAY} 秒後進行第 {attempt + 1} 次重試...")
+                time.sleep(RETRY_DELAY)
+            else:
+                print("❌ 已達到最大重試次數 (3次)。本次高雄綠能平台傳送暫時跳過，等待下一期(15分鐘後)自動觸發。")
+
+except Exception as e:
+    print(f"\n執行過程中發生錯誤: {e}")
+    raise e
