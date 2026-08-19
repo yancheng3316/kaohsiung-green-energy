@@ -37,11 +37,11 @@ jobs:
           pip install requests
 
       # 步驟 4：執行抓取數據並上傳至高雄綠能平台的 Python 腳本
-      # 注意：請將 main.py 替換為您專案中實際的 Python 檔名
       - name: Run Solar Data Upload Script
         env:
-          # 若您有使用 Repository Secrets，可以在此將環境變數傳入腳本
+          SOLAREDGE_SITE_ID: ${{ secrets.SOLAREDGE_SITE_ID }}
           SOLAREDGE_API_KEY: ${{ secrets.SOLAREDGE_API_KEY }}
-          KAOHSIUNG_API_TOKEN: ${{ secrets.KAOHSIUNG_API_TOKEN }}
+          KEMS_API_KEY: ${{ secrets.KEMS_API_KEY }}
+          UBID: ${{ secrets.UBID }}
         run: |
           python upload.py
