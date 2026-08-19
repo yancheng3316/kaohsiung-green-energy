@@ -1,16 +1,22 @@
 import urllib.request
 import json
 import time
+import os
 from datetime import datetime, timezone, timedelta
 
-# --- 1. 設定參數 ---
-SOLAREDGE_SITE_ID = "4391290"
-SOLAREDGE_API_KEY = "BZACTRW5TQFVOUDOL6X45SFJX7Y4UAQ5"
+# --- 1. 從環境變數 (GitHub Secrets) 讀取金鑰與設定 ---
+SOLAREDGE_SITE_ID = os.environ.get("SOLAREDGE_SITE_ID")
+SOLAREDGE_API_KEY = os.environ.get("SOLAREDGE_API_KEY")
 
-KEMS_API_KEY = "0BC4B29B-858A-4FA2-9287-90CE11672F42"
-UBID = "76010302"
+KEMS_API_KEY = os.environ.get("KEMS_API_KEY")
+UBID = os.environ.get("UBID")
 FCID = "1"
 TYPE_D = "FS1"
+
+# 檢查保密箱 Secrets 是否設定完整
+if not all([SOLAREDGE_SITE_ID, SOLAREDGE_API_KEY, KEMS_API_KEY, UBID]):
+    print("❌ 錯誤：無法抓取完整的 GitHub Secrets 設定，請確認步驟 1 的 Secrets 是否設定正確。")
+    exit(1)
 
 headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
